@@ -1,5 +1,11 @@
 const elements = {
+  packageTabs: document.getElementById("package-tabs"),
+  packagePanels: document.getElementById("package-panels"),
+  packageContent: document.getElementById("package-content"),
+  packageTitle: document.getElementById("package-title"),
+  playPackage: document.getElementById("play-package"),
   trackList: document.getElementById("track-list"),
+  trackStatus: document.getElementById("track-status"),
   audio: document.getElementById("audio-player"),
   speed: document.getElementById("speed"),
   speedValue: document.getElementById("speed-value"),
@@ -9,7 +15,6 @@ const elements = {
   sourceList: document.getElementById("source-list"),
   trackListBottom: document.getElementById("track-list-bottom"),
   trackTitle: document.getElementById("track-title"),
-  trackSubtitle: document.getElementById("track-subtitle"),
   verses: document.getElementById("verses"),
   installApp: document.getElementById("install-app"),
   // custom player
@@ -24,8 +29,11 @@ const elements = {
 };
 
 const state = {
-  tracks: [],
+  packages: [],
+  activePackage: null,
+  playingPackage: false,
   track: null,
+  trackRequest: 0,
   timedLines: [],
   lineCards: [],    // one entry per timedLine index
   wordNodes: [],    // one array per timedLine index
@@ -41,6 +49,7 @@ const IS_DEBUG = new URLSearchParams(location.search).get("debug") === "91324";
 const PERSIAN_DIGITS = "۰۱۲۳۴۵۶۷۸۹";
 const ARABIC_INDIC_DIGITS = "٠١٢٣٤٥٦٧٨٩";
 const STORAGE_PREFIX = "farh2:tafsir:";
+const PLAYBACK_RATE_KEY = "nasr:playback-rate";
 
 function toPersianNumber(input) {
   return String(input).replace(/\d/g, (d) => PERSIAN_DIGITS[d]);
@@ -198,10 +207,14 @@ function sanitizeWordTimeline(words, fallbackScript = "arabic") {
 function buildTrackTimeline(track) {
   return (track.segments || []).map((segment, index) => {
     const wordTimestamps = segment.words || [];
-    const textWords = splitWords(segment.text || "");
+    const text = segment.text || "";
+    // Tanzil writes some pause marks as separate tokens, but they have no audio of their own.
+    const textWords = Number.isInteger(segment.ayah)
+      ? text.match(/\S+(?: +[\u06d6-\u06dc](?= |$))*/g) || []
+      : splitWords(text);
 
-    const segStart = wordTimestamps.length ? wordTimestamps[0].start : 0;
-    const segEnd = wordTimestamps.length ? wordTimestamps[wordTimestamps.length - 1].end : segStart + 1;
+    const segStart = segment.start ?? wordTimestamps[0]?.start ?? 0;
+    const segEnd = segment.end ?? wordTimestamps[wordTimestamps.length - 1]?.end ?? segStart + 1;
 
     let words;
     if (textWords.length > 0 && wordTimestamps.length > 0) {
@@ -222,11 +235,11 @@ function buildTrackTimeline(track) {
 
     return {
       id: index,
-      arabic: segment.text || "",
+      arabic: text,
       translation: segment.translation || "",
       tafsir: segment.tafsir || "",
       lang: segment.language || segment.lang || "ar",
-      verse: index,
+      verse: segment.ayah ?? index,
       start: segStart,
       end: segEnd,
       words,
@@ -246,25 +259,55 @@ function saveTafsir(trackId, lineId, text) {
   localStorage.setItem(tafsirStorageKey(trackId, lineId), text);
 }
 
-function updateSpeedLabel() {
-  elements.speedValue.textContent = formatRate(Number(elements.speed.value));
+function applyPlaybackRate() {
+  const rate = Number(elements.speed.value);
+  elements.audio.defaultPlaybackRate = rate;
+  elements.audio.playbackRate = rate;
+  elements.speedValue.textContent = formatRate(rate);
+}
+
+function restorePlaybackRate() {
+  try {
+    const savedRate = Number(localStorage.getItem(PLAYBACK_RATE_KEY));
+    if (savedRate >= Number(elements.speed.min) && savedRate <= Number(elements.speed.max)) {
+      elements.speed.value = String(savedRate);
+    }
+  } catch (_) {}
+  applyPlaybackRate();
 }
 
 function renderTrackButtons() {
-  const containers = [elements.trackList, elements.trackListBottom].filter(Boolean);
+  const containers = [elements.trackList, elements.trackListBottom];
   for (const container of containers) {
-    container.innerHTML = "";
-    for (const track of state.tracks) {
+    container.replaceChildren();
+    for (const track of state.activePackage.tracks) {
       const button = document.createElement("button");
-      button.className = `track-btn ${state.track?.id === track.id ? "active" : ""}`;
+      button.className = "track-btn";
       button.type = "button";
+      button.dataset.trackId = track.id;
+      const icon = document.createElement("span");
+      icon.className = "track-symbol";
+      icon.setAttribute("aria-hidden", "true");
       const title = document.createElement("strong");
       title.textContent = track.title;
       const subtitle = document.createElement("small");
       subtitle.textContent = track.subtitle;
-      button.append(title, subtitle);
-      button.addEventListener("click", () => selectTrack(track.id));
+      button.append(icon, title, subtitle);
+      button.addEventListener("click", () => {
+        state.playingPackage = false;
+        selectTrack(track);
+      });
       container.appendChild(button);
+    }
+  }
+  updateSelectedTrack();
+}
+
+function updateSelectedTrack() {
+  for (const container of [elements.trackList, elements.trackListBottom]) {
+    for (const button of container.children) {
+      const active = button.dataset.trackId === state.track?.id;
+      button.setAttribute("aria-pressed", String(active));
     }
   }
 }
@@ -528,6 +571,7 @@ function syncWordState() {
   const isQuran = !!state.track?.isQuran;
   const lineChanged = lineIndex !== state.activeLineIndex;
   const wordChanged = wordIndex !== state.activeWordIndex;
+  const shouldScroll = elements.autoScroll.checked && (!elements.audio.paused || elements.audio.seeking);
 
   // Update word highlights for all lines
   for (let i = 0; i < state.timedLines.length; i++) {
@@ -555,7 +599,7 @@ function syncWordState() {
       group.card.classList.toggle("verse-passed", isPassed);
     }
     // Auto-scroll to verse group when verse changes
-    if (lineChanged && elements.autoScroll.checked) {
+    if (lineChanged && shouldScroll) {
       const activeGroup = state.verseGroups.find((g) => g.lineIndices.includes(lineIndex));
       activeGroup?.card.scrollIntoView({ behavior: "smooth", block: "center" });
     }
@@ -568,7 +612,7 @@ function syncWordState() {
       card.classList.toggle("done", i < lineIndex);
     }
     // Auto-scroll
-    if ((lineChanged || wordChanged) && elements.autoScroll.checked) {
+    if ((lineChanged || wordChanged) && shouldScroll) {
       const lang = activeLine.lang || "ar";
       const targetWord = lang !== "fa" ? state.wordNodes[lineIndex]?.[wordIndex] : null;
       if (targetWord) {
@@ -681,7 +725,7 @@ function setupMediaSession(track) {
 
   navigator.mediaSession.metadata = new MediaMetadata({
     title: track.title,
-    artist: track.subtitle || "آیات فتح دعای نصر",
+    artist: track.reciter || track.subtitle || "آیات فتح دعای نصر",
     artwork: [{ src: "icons/icon.png", sizes: "any", type: "image/png" }],
   });
 
@@ -713,55 +757,119 @@ function updateMediaSessionPosition() {
   } catch (_) {}
 }
 
-// ── Track management ────────────────────────────────────────────────────────
+// ── Collection and track management ────────────────────────────────────────
 
-function rebuildTimelineUsingAudioDuration() {
-  if (!state.track?.segments) return;
-  state.timedLines = buildTrackTimeline(state.track);
-  renderLines();
-  syncWordState();
+function renderPackageTabs() {
+  for (const collection of state.packages) {
+    const tab = document.createElement("button");
+    tab.id = `tab-${collection.id}`;
+    tab.className = "package-tab";
+    tab.type = "button";
+    tab.textContent = collection.tabLabel || collection.title;
+    tab.setAttribute("role", "tab");
+    tab.setAttribute("aria-controls", `panel-${collection.id}`);
+    tab.addEventListener("click", () => selectPackage(collection));
+
+    const panel = document.createElement("div");
+    panel.id = `panel-${collection.id}`;
+    panel.setAttribute("role", "tabpanel");
+    panel.setAttribute("aria-labelledby", tab.id);
+    panel.tabIndex = 0;
+    panel.hidden = true;
+
+    collection.tab = tab;
+    collection.panel = panel;
+    elements.packageTabs.appendChild(tab);
+    elements.packagePanels.appendChild(panel);
+  }
 }
 
-async function selectTrack(trackId) {
-  const next = state.tracks.find((item) => item.id === trackId);
-  if (!next) return;
+function selectPackage(collection) {
+  if (collection === state.activePackage) return;
+  state.activePackage = collection;
+  state.playingPackage = false;
 
-  const wasPlaying = !elements.audio.paused;
+  for (const item of state.packages) {
+    const active = item === collection;
+    item.tab.setAttribute("aria-selected", String(active));
+    item.tab.tabIndex = active ? 0 : -1;
+    item.panel.hidden = !active;
+  }
+  collection.panel.appendChild(elements.packageContent);
+  elements.packageTitle.textContent = collection.title;
+  elements.playPackage.hidden = !collection.playAll;
 
-  state.track = next;
-  state.activeLineIndex = -1;
-  state.activeWordIndex = -1;
+  elements.audio.pause();
+  if (state.track) {
+    elements.audio.removeAttribute("src");
+    elements.audio.load();
+  }
+  state.track = null;
+  state.timedLines = [];
+  elements.trackTitle.textContent = "";
+  elements.playPause.disabled = true;
+  renderSources();
+  renderLines();
+  renderTrackButtons();
+  selectTrack(collection.selectedTrack || collection.tracks[0], { autoplay: false });
+}
 
-  if (IS_DEBUG) delete next.segments;
+function showTrackStatus(message = "") {
+  elements.trackStatus.textContent = message;
+  elements.trackStatus.hidden = !message;
+}
 
-  if (!next.segments) {
+async function selectTrack(next, { autoplay, reveal = false } = {}) {
+  const request = ++state.trackRequest;
+  if (!next.segments || IS_DEBUG) {
+    showTrackStatus("در حال بارگیری متن…");
     try {
       const response = await fetch(next.data, { cache: "no-store" });
       if (!response.ok) throw new Error(`Failed to load ${next.data} (${response.status})`);
-      next.segments = await response.json();
+      const segments = await response.json();
+      if (request !== state.trackRequest) return;
+      if (!Array.isArray(segments) || !segments.length) throw new Error("Track has no text segments");
+      next.segments = segments;
     } catch (error) {
-      elements.verses.innerHTML = `<p class="error">${error.message}</p>`;
-      elements.lineStatus.textContent = "خطا";
-      elements.wordStatus.textContent = "خطا";
+      if (request !== state.trackRequest) return;
+      state.playingPackage = false;
+      console.error(error);
+      showTrackStatus("متن بارگیری نشد. برای تلاش دوباره، اثر را انتخاب کنید.");
       return;
     }
   }
 
+  const shouldPlay = autoplay ?? !elements.audio.paused;
+  state.activePackage.selectedTrack = next;
+  state.track = next;
+  state.activeLineIndex = -1;
+  state.activeWordIndex = -1;
   state.timedLines = buildTrackTimeline(next);
 
   elements.trackTitle.textContent = next.title;
-  elements.trackSubtitle.textContent = next.subtitle;
-
+  elements.playPause.disabled = false;
   elements.audio.src = next.audio;
   elements.audio.load();
+  elements.audio.playbackRate = elements.audio.defaultPlaybackRate;
 
-  renderTrackButtons();
+  showTrackStatus();
+  updateSelectedTrack();
   renderSources();
   renderLines();
   syncWordState();
   setupMediaSession(next);
+  if (reveal) {
+    requestAnimationFrame(() => {
+      if (request === state.trackRequest) window.scrollTo({ top: 0, behavior: "instant" });
+    });
+  }
 
-  if (wasPlaying) elements.audio.play().catch(() => {});
+  if (shouldPlay) {
+    elements.audio.play().catch((error) => {
+      if (request !== state.trackRequest || error.name === "AbortError") return;
+      showTrackStatus("برای شروع تلاوت، دکمهٔ پخش را بزنید.");
+    });
+  }
 }
 
 // ── Events ──────────────────────────────────────────────────────────────────
@@ -769,13 +877,52 @@ async function selectTrack(trackId) {
 function bindEvents() {
   elements.audio.addEventListener("timeupdate", syncWordState);
   elements.audio.addEventListener("seeking", syncWordState);
-  elements.audio.addEventListener("play", syncWordState);
-  elements.audio.addEventListener("loadedmetadata", rebuildTimelineUsingAudioDuration);
+  elements.audio.addEventListener("play", () => {
+    showTrackStatus();
+    syncWordState();
+  });
+  elements.audio.addEventListener("ended", () => {
+    if (!elements.audio.ended || !state.activePackage?.playAll || !state.track) return;
+    const tracks = state.activePackage.tracks;
+    const next = tracks[tracks.indexOf(state.track) + 1];
+    if (next) selectTrack(next, { autoplay: state.playingPackage, reveal: true });
+    else state.playingPackage = false;
+  });
+  elements.audio.addEventListener("error", () => {
+    if (!state.track) return;
+    state.playingPackage = false;
+    showTrackStatus("پخش صوت ممکن نشد. دوباره اثر را انتخاب کنید.");
+  });
+
+  elements.playPackage.addEventListener("click", () => {
+    state.playingPackage = true;
+    selectTrack(state.activePackage.tracks[0], { autoplay: true });
+  });
+
+  elements.packageTabs.addEventListener("keydown", (event) => {
+    const index = state.packages.findIndex((collection) => collection.tab === event.target);
+    if (index < 0) return;
+    const count = state.packages.length;
+    let target;
+    switch (event.key) {
+      case "ArrowLeft": target = (index + 1) % count; break;
+      case "ArrowRight": target = (index + count - 1) % count; break;
+      case "Home": target = 0; break;
+      case "End": target = count - 1; break;
+      default: return;
+    }
+    event.preventDefault();
+    const next = state.packages[target];
+    selectPackage(next);
+    next.tab.focus();
+  });
 
   elements.speed.addEventListener("input", () => {
-    const rate = Number(elements.speed.value);
-    elements.audio.playbackRate = rate;
-    updateSpeedLabel();
+    applyPlaybackRate();
+    updateMediaSessionPosition();
+    try {
+      localStorage.setItem(PLAYBACK_RATE_KEY, elements.speed.value);
+    } catch (_) {}
   });
 
   elements.installApp.addEventListener("click", async () => {
@@ -809,7 +956,7 @@ function bindEvents() {
 
   // Keyboard shortcuts (always active)
   document.addEventListener("keydown", (e) => {
-    if (e.target.closest("input, textarea, select")) return;
+    if (e.defaultPrevented || e.target.closest("input, textarea, select, button, [role='button'], a")) return;
     switch (e.key) {
       case "]":
         e.preventDefault();
@@ -869,13 +1016,23 @@ async function loadData() {
     const response = await fetch("data/list.json", { cache: "no-store" });
     if (!response.ok) throw new Error(`Failed to load data/list.json (${response.status})`);
     const payload = await response.json();
-    state.tracks = payload.list || [];
-    if (!state.tracks.length) throw new Error("No tracks found in data file.");
-    selectTrack(state.tracks[0].id);
+    const tracks = new Map((payload.list || []).map((track) => [track.id, track]));
+    const packages = payload.packages ?? [{
+      id: "main",
+      title: "توصیه قائد شهید جهت پیروزی جبهه مقاومت",
+      tabLabel: "توصیه قائد شهید",
+      tracks: [...tracks.keys()],
+    }];
+    state.packages = packages.map((item) => ({
+      ...item,
+      tracks: item.tracks.map((id) => tracks.get(id)).filter(Boolean),
+    })).filter((item) => item.tracks.length > 0);
+    if (!state.packages.length) throw new Error("No packages found in data file.");
+    renderPackageTabs();
+    selectPackage(state.packages.find((item) => item.id === payload.defaultPackageId) || state.packages[0]);
   } catch (error) {
-    elements.verses.innerHTML = `<p class="error">${error.message}</p>`;
-    elements.lineStatus.textContent = "خطا";
-    elements.wordStatus.textContent = "خطا";
+    console.error(error);
+    showTrackStatus("فهرست مجموعه‌ها بارگیری نشد. صفحه را دوباره باز کنید.");
   }
 }
 
@@ -967,7 +1124,7 @@ function setupDebugTimer() {
 }
 
 function init() {
-  updateSpeedLabel();
+  restorePlaybackRate();
   bindEvents();
   setupPlayerControls();
   setupDebugTimer();

@@ -1,4 +1,4 @@
-const CACHE_NAME = "fath-pwa-v5.5";
+const CACHE_NAME = "fath-pwa-v6.2";
 const APP_SHELL = [
   "./",
   "./index.html",

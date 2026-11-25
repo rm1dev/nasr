@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="آیات فتح دعای نصر" />
-    <title>آیات فتح دعای نصر</title>
+    <title>آیات فتح و دعای نصر</title>
 
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/icon.png" />
@@ -21,23 +21,30 @@
 
     <div class="mobile-app">
       <header class="top-bar glass">
-        <div>
-          <h1 id="track-title">آیات فتح دعای نصر</h1>
-          <p id="track-subtitle">...</p>
-        </div>
+        <h1><span class="app-mark" aria-hidden="true">✦</span> آیات فتح و دعای نصر</h1>
         <button id="install-app" class="install-btn" hidden>نصب</button>
       </header>
 
-      <section class="track-strip" id="track-list" aria-label="انتخاب فایل"></section>
+      <div class="package-tabs" id="package-tabs" role="tablist" aria-label="مجموعه‌ها"></div>
+      <div id="package-panels">
+        <div class="package-content" id="package-content">
+          <div class="package-heading">
+            <h2 id="package-title"></h2>
+            <button class="play-package" id="play-package" type="button" hidden>پخش همه</button>
+          </div>
 
-      <main id="verses" class="verses"></main>
+          <div class="track-list" id="track-list" role="group" aria-label="انتخاب اثر"></div>
+          <p class="track-status" id="track-status" role="status" hidden></p>
+          <main id="verses" class="verses"></main>
 
-      <details class="sources glass">
-        <summary>منابع متن</summary>
-        <ul id="source-list"></ul>
-      </details>
+          <details class="sources glass" hidden>
+            <summary>منابع این اثر</summary>
+            <ul id="source-list"></ul>
+          </details>
 
-      <section class="track-strip" id="track-list-bottom" aria-label="انتخاب فایل"></section>
+          <div class="track-list" id="track-list-bottom" role="group" aria-label="انتخاب اثر"></div>
+        </div>
+      </div>
     </div>
 
     <div class="settings-sheet glass" id="settings-sheet">
@@ -77,14 +84,17 @@
           <button class="ctrl-btn" id="skip-back" type="button" aria-label="آیه قبل">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="17" y="5" width="3" height="14" rx="1"/><polygon points="5,5 16,12 5,19"/></svg>
           </button>
-          <button class="ctrl-btn ctrl-play" id="play-pause" type="button" aria-label="پخش" data-state="paused">
+          <button class="ctrl-btn ctrl-play" id="play-pause" type="button" aria-label="پخش" data-state="paused" disabled>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="5,3 19,12 5,21"/></svg>
           </button>
           <button class="ctrl-btn" id="skip-forward" type="button" aria-label="آیه بعد">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="4" y="5" width="3" height="14" rx="1"/><polygon points="19,5 8,12 19,19"/></svg>
           </button>
         </div>
-        <span class="audio-time" id="audio-time">۰:۰۰ / ۰:۰۰</span>
+        <div class="audio-track">
+          <strong id="track-title"></strong>
+          <span class="audio-time" id="audio-time">۰:۰۰ / ۰:۰۰</span>
+        </div>
       </div>
     </div>
 
