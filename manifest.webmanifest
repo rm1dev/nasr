@@ -1,0 +1,21 @@
+{
+  "name": "آیات فتح دعای نصر",
+  "short_name": "آیات فتح دعای نصر",
+  "lang": "fa",
+  "dir": "rtl",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#120d0b",
+  "theme_color": "#1a130f",
+  "description": "توصیه رهبر شهید به خواندن سوره فتح، دعای چهاردهم صحیفه سجادیه و دعای توسل برای موفقیت جبهه مقاومت.",
+  "icons": [
+    {
+      "src": "icons/icon.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

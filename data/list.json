@@ -1,0 +1,34 @@
+{
+  "updatedAt": "2026-03-05T00:54:53.166029Z",
+  "list": [
+    {
+      "id": "fath",
+      "title": "سوره فتح",
+      "subtitle": "سوره ۴۸ قرآن کریم",
+      "audio": "data/sounds/fath.mp3",
+      "data": "data/sounds/fath.json",
+      "durationHint": 630.413063,
+      "isQuran": true
+    },
+    {
+      "id": "sahife_sajadie_14",
+      "title": "دعای ۱۴ صحیفه سجادیه",
+      "subtitle": "دعا در ظلم‌دیدگی و دادخواهی",
+      "audio": "data/sounds/sahife_sajadie_14.mp3",
+      "data": "data/sounds/sahife_sajadie_14.json",
+      "sources": [
+        { "title": "محسنون", "url": "https://muhsinun.ir/دعای-چهاردهم-صحیفه-سجادیه/" }
+      ],
+      "durationHint": 653.867438
+    },
+    {
+      "id": "tavasol",
+      "title": "دعای توسل",
+      "subtitle": "نسخه عربی همراه ترجمه فارسی",
+      "audio": "data/sounds/tavasol.mp3",
+      "data": "data/sounds/tavasol.json",
+      "durationHint": 848.876188,
+      "isQuran": true
+    }
+  ]
+}

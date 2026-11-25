@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \"from faster_whisper import WhisperModel; print\\(''faster_whisper OK''\\)\")",
+      "Bash(echo \"Exit: $?\")"
+    ]
+  }
+}
