@@ -13,7 +13,6 @@ const elements = {
   lineStatus: document.getElementById("line-status"),
   wordStatus: document.getElementById("word-status"),
   sourceList: document.getElementById("source-list"),
-  trackListBottom: document.getElementById("track-list-bottom"),
   trackTitle: document.getElementById("track-title"),
   verses: document.getElementById("verses"),
   installApp: document.getElementById("install-app"),
@@ -277,38 +276,33 @@ function restorePlaybackRate() {
 }
 
 function renderTrackButtons() {
-  const containers = [elements.trackList, elements.trackListBottom];
-  for (const container of containers) {
-    container.replaceChildren();
-    for (const track of state.activePackage.tracks) {
-      const button = document.createElement("button");
-      button.className = "track-btn";
-      button.type = "button";
-      button.dataset.trackId = track.id;
-      const icon = document.createElement("span");
-      icon.className = "track-symbol";
-      icon.setAttribute("aria-hidden", "true");
-      const title = document.createElement("strong");
-      title.textContent = track.title;
-      const subtitle = document.createElement("small");
-      subtitle.textContent = track.subtitle;
-      button.append(icon, title, subtitle);
-      button.addEventListener("click", () => {
-        state.playingPackage = false;
-        selectTrack(track);
-      });
-      container.appendChild(button);
-    }
+  elements.trackList.replaceChildren();
+  for (const track of state.activePackage.tracks) {
+    const button = document.createElement("button");
+    button.className = "track-btn";
+    button.type = "button";
+    button.dataset.trackId = track.id;
+    const icon = document.createElement("span");
+    icon.className = "track-symbol";
+    icon.setAttribute("aria-hidden", "true");
+    const title = document.createElement("strong");
+    title.textContent = track.title;
+    const subtitle = document.createElement("small");
+    subtitle.textContent = track.subtitle;
+    button.append(icon, title, subtitle);
+    button.addEventListener("click", () => {
+      state.playingPackage = false;
+      selectTrack(track);
+    });
+    elements.trackList.appendChild(button);
   }
   updateSelectedTrack();
 }
 
 function updateSelectedTrack() {
-  for (const container of [elements.trackList, elements.trackListBottom]) {
-    for (const button of container.children) {
-      const active = button.dataset.trackId === state.track?.id;
-      button.setAttribute("aria-pressed", String(active));
-    }
+  for (const button of elements.trackList.children) {
+    const active = button.dataset.trackId === state.track?.id;
+    button.setAttribute("aria-pressed", String(active));
   }
 }
 
